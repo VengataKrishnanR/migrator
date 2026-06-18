@@ -539,7 +539,7 @@ async function doSendChat() {
     const r = await fetch(`${API}/api/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: fullMessage, session_id: chatSessionId }),
+      body: JSON.stringify({ message: fullMessage, session_id: chatSessionId, job_id: jobId || '' }),
       signal: controller.signal,
     });
     clearTimeout(tid);
@@ -699,21 +699,27 @@ $('btn-test-report').addEventListener('click', async () => {
   btn.disabled = true;
 
   try {
-    const r = await fetch(`${API}/api/test-report/xlsx`);
+    /* Use job-specific report when a migration is active; otherwise the static pytest report */
+    const reportUrl  = jobId ? `${API}/api/jobs/${jobId}/test-report` : `${API}/api/test-report/xlsx`;
+    const reportName = jobId ? `${jobId}_test_report.xlsx` : 'ngreact_test_report.xlsx';
+
+    const r = await fetch(reportUrl);
     if (r.status === 404) {
-      showError('Test report not found. Run:  pytest tests/  to generate it.');
+      showError(jobId
+        ? 'Test report not ready — wait for Phase 3 (test generation) to complete.'
+        : 'Test report not found. Run:  pytest tests/  to generate it.');
       return;
     }
     if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      throw new Error(body.detail || `HTTP ${r.status}`);
+      const bd = await r.json().catch(() => ({}));
+      throw new Error(bd.detail || `HTTP ${r.status}`);
     }
     const blob = await r.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = 'ngreact_test_report.xlsx';
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl; a.download = reportName;
     document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(blobUrl);
     btn.textContent = 'Downloaded';
     setTimeout(() => { btn.textContent = orig; }, 2500);
   } catch (e) {

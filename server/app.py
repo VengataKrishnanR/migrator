@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import json
 import os
 import re as _re
@@ -305,7 +306,7 @@ async def resume(job_id: str) -> dict[str, Any]:
 _UI_DIR = Path(__file__).resolve().parents[1] / "ui"
 
 
-def _ui_run(message: str) -> str:
+def _ui_run(message: str, session_id: str | None = None) -> str:
     """Run the conversational root_agent once and return its final text.
 
     Imported lazily so the job API and offline tests don't require google-adk.
@@ -315,7 +316,11 @@ def _ui_run(message: str) -> str:
     from agent import root_agent
     from .agent_invoker import _collect_final_text
 
-    return _collect_final_text(root_agent, message, uuid.uuid4().hex)
+    return _collect_final_text(root_agent, message, session_id or uuid.uuid4().hex)
+
+
+# Per-session conversation history for the chat popup (in-process, resets on restart).
+_chat_history: dict[str, list[dict]] = {}
 
 
 @app.post("/api/session")
@@ -326,25 +331,65 @@ def ui_session() -> dict[str, str]:
 
 _CHAT_SCOPE = (
     "You are an Angular-to-React migration expert embedded in the NgReact platform. "
-    "Only answer questions about Angular-to-React migration, the provided Angular source "
-    "code, transformation decisions, DHL DUIL compliance, migration risks, generated "
-    "reports, and React best practices relevant to the migration. "
-    "For any question outside migration analysis scope respond exactly with: "
-    "\"This question is outside the migration analysis scope.\"\n\n"
+    "Help with questions about Angular-to-React migration, the provided Angular source code, "
+    "transformation decisions, DHL DUIL compliance, migration risks, generated reports, "
+    "React best practices, and general software engineering topics relevant to the project. "
+    "If a job context is provided, use it to give informed answers about the current migration. "
+    "Keep answers concise and practical.\n\n"
 )
 
 
 @app.post("/api/run")
 def ui_run(body: dict = Body(...)) -> JSONResponse:
-    message = (body.get("message") or "").strip()
-    if not message:
+    raw_message = (body.get("message") or "").strip()
+    session_id  = body.get("session_id") or uuid.uuid4().hex
+    job_id_hint = (body.get("job_id") or "").strip()
+    if not raw_message:
         raise HTTPException(400, "Empty message")
+
+    # Optionally inject current migration job state as context
+    job_context = ""
+    if job_id_hint:
+        try:
+            from tools.workflow.artifacts import read_artifact
+            status   = service.status(job_id_hint)
+            phase1   = read_artifact(service._workspace(job_id_hint), "phase1_report")
+            analysis = {}
+            if phase1 and isinstance(phase1, dict):
+                analysis = (phase1.get("analysis_report")
+                            or (phase1.get("stages") or [{}])[0].get("output") or {})
+            job_context = (
+                f"[Current migration job: {job_id_hint} | State: {status.get('state', '?')}"
+                + (f" | Angular {analysis.get('angular_version')}"
+                   if analysis.get("angular_version") else "")
+                + (f" | {analysis.get('component_count')} components"
+                   if analysis.get("component_count") else "")
+                + "]\n"
+            )
+        except Exception:
+            pass  # job context is optional — never fail the chat
+
+    # Build prompt: scope + optional job context + conversation history + user message
+    history = _chat_history.get(session_id, [])
+    parts: list[str] = [_CHAT_SCOPE]
+    if job_context:
+        parts.append(job_context)
+    if history:
+        conv = "\n\n".join(f"User: {t['q']}\nAssistant: {t['a']}" for t in history[-8:])
+        parts.append(f"Previous conversation:\n{conv}\n---")
+    parts.append(raw_message)
+    full_prompt = "\n\n".join(parts)
+
     try:
-        response = _ui_run(_CHAT_SCOPE + message)
-    except Exception as e:  # surface a clean error to the UI
+        response = _ui_run(full_prompt, session_id=session_id)
+    except Exception as e:
         raise HTTPException(500, str(e)) from e
-    return JSONResponse({"session_id": body.get("session_id") or uuid.uuid4().hex,
-                         "response": response})
+
+    # Persist this turn so follow-up messages have context
+    _chat_history.setdefault(session_id, []).append({"q": raw_message, "a": response})
+    _chat_history[session_id] = _chat_history[session_id][-20:]
+
+    return JSONResponse({"session_id": session_id, "response": response})
 
 
 @app.post("/api/upload")
@@ -409,6 +454,45 @@ def download_test_report() -> FileResponse:
         report_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename="ngreact_test_report.xlsx",
+    )
+
+
+@app.get("/api/jobs/{job_id}/test-report")
+def download_job_test_report(job_id: str) -> StreamingResponse:
+    """Download a job-specific XLSX built from the Phase 3 TestPlan + TestSuite artifacts.
+
+    Covers positive scenarios (Smoke, Regression) and integration/E2E scenarios derived
+    from the migration plan for this exact job — not the project's own unit test suite.
+    Returns 404 until Phase 3 has completed and the test_plan artifact exists.
+    """
+    from tools.workflow.artifacts import read_artifact
+    from .test_workbook import build_test_workbook
+
+    if service.store.get_job(job_id) is None:
+        raise HTTPException(404, f"No such job: {job_id}")
+
+    ws = service._workspace(job_id)
+    test_plan = read_artifact(ws, "test_plan")
+    if test_plan is None:
+        raise HTTPException(
+            404,
+            "Test plan not available yet — wait for Phase 3 (test generation) to complete.",
+        )
+
+    # Collect every test suite written during Phase 3 (keys: tests_<chunk_id>)
+    all_keys = [a["key"] for a in (service.store.list_artifacts(job_id) or [])]
+    suites = []
+    for key in sorted(all_keys):
+        if key.startswith("tests_"):
+            suite = read_artifact(ws, key)
+            if suite:
+                suites.append(suite)
+
+    xlsx_bytes = build_test_workbook(test_plan, suites)
+    return StreamingResponse(
+        io.BytesIO(xlsx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{job_id}_test_report.xlsx"'},
     )
 
 

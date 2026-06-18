@@ -1,0 +1,52 @@
+# NgReact Knowledge Base Registry
+#
+# Each entry defines one Qdrant collection exposed as a named FunctionTool.
+# Adding a knowledge base requires only a new YAML entry — no code change.
+#
+# Fields:
+#   id          : unique snake_case identifier
+#   name        : human-readable label shown to the LLM
+#   collection  : exact Qdrant collection name
+#   description : what this KB contains (becomes the FunctionTool docstring — be precise)
+#   tool_name   : Python function name exposed to the LLM (use search_<id> convention)
+#   vector_name : named vector to query (omit for single-vector collections)
+#   enabled     : (optional, default: true) set to false to exclude without deleting
+
+knowledge_bases:
+
+  - id: angular_best_practices
+    name: "Angular Best Practices"
+    collection: angular_best_practices_kb
+    description: >
+      Angular framework best practices, design patterns, and coding guidelines.
+      Search this KB for questions about Angular components, services, modules,
+      RxJS usage, dependency injection, routing, forms, lifecycle hooks,
+      decorators, change detection, and Angular-specific conventions.
+    tool_name: search_angular_best_practices
+    vector_name: dense
+    enabled: true
+
+  - id: react_best_practices
+    name: "React Best Practices"
+    collection: react_best_practices_kb
+    description: >
+      React 18+ best practices, hooks patterns, state management guidelines,
+      and coding conventions. Search this KB for questions about functional
+      components, React hooks (useState, useEffect, useContext, useReducer,
+      useMemo, useCallback), React Router v6, React Hook Form, Context API,
+      performance optimisation, and React TypeScript patterns.
+    tool_name: search_react_best_practices
+    vector_name: dense
+    enabled: true
+
+  - id: migration_patterns
+    name: "Angular to React Migration Patterns"
+    collection: ang2react_migration_kb
+    description: >
+      Curated patterns and recipes for migrating Angular applications to React.
+      Covers component migration, service-to-context conversion, RxJS-to-hooks
+      mapping, routing migration, form migration, and common pitfalls with
+      recommended solutions.
+    tool_name: search_migration_patterns
+    vector_name: dense
+    enabled: true

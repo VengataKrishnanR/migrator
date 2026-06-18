@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NextGen Refactor — Angular → React</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="dhl-header">
+    <div class="dhl-header__brand">
+      <span class="dhl-logo">DHL</span>
+      <span class="dhl-header__title">NextGen Refactor</span>
+      <span class="dhl-header__sub">Angular → DHL React 18+ migration</span>
+    </div>
+    <div class="dhl-header__right">
+      <button id="btn-test-report" class="dhl-btn dhl-btn--ghost dhl-btn--sm"
+              title="Download XLSX test report (run: pytest tests/ first)">
+        Test Report
+      </button>
+      <div id="status-badge" class="dhl-badge dhl-badge--loading">
+        <span id="status-dot" class="dhl-badge__dot"></span>
+        <span id="status-label">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="dhl-main">
+
+    <!-- ══════════════════════════════════════════════════════
+         LEFT SIDEBAR — compact source input + pipeline flow
+         ══════════════════════════════════════════════════════ -->
+    <aside class="dhl-sidebar">
+
+      <!-- Source input (compact) -->
+      <div class="dhl-source-card">
+        <div class="dhl-tabs">
+          <button class="dhl-tab dhl-tab--active" data-tab="paste">Paste</button>
+          <button class="dhl-tab" data-tab="upload">Upload</button>
+          <button class="dhl-tab" data-tab="integrate">Git</button>
+        </div>
+
+        <div id="tab-paste" class="dhl-tab-panel dhl-tab-panel--active">
+          <textarea id="paste-area" class="dhl-textarea"
+            placeholder="Paste Angular component / service / module code…"></textarea>
+          <div class="dhl-meta"><span id="char-count">0 chars</span></div>
+        </div>
+
+        <div id="tab-upload" class="dhl-tab-panel">
+          <div id="drop-zone" class="dhl-drop-zone">
+            <div class="dhl-drop-zone__icon">📦</div>
+            <div class="dhl-drop-zone__text">Drop <strong>.zip</strong> or click to browse</div>
+            <input id="file-input" type="file" accept=".zip" hidden />
+          </div>
+          <div id="file-list" class="dhl-file-list"></div>
+        </div>
+
+        <div id="tab-integrate" class="dhl-tab-panel">
+          <input id="github-url" class="dhl-input" type="text"
+                 placeholder="https://github.com/org/my-angular-app.git" />
+          <input id="raw-url" class="dhl-input" type="text"
+                 placeholder="Branch (optional, default: main)" style="margin-top:6px" />
+          <input id="pat-token" class="dhl-input" type="password"
+                 placeholder="Access token (private repos)" style="margin-top:6px" />
+        </div>
+
+        <div class="dhl-actions">
+          <button id="btn-convert" class="dhl-btn dhl-btn--primary" disabled>
+            &#9883; Start Migration
+          </button>
+          <button id="btn-clear" class="dhl-btn dhl-btn--ghost">Clear</button>
+        </div>
+      </div>
+
+      <!-- Pipeline flow (below source) -->
+      <div class="dhl-pipeline-card">
+        <div class="dhl-pipeline__title">Pipeline</div>
+
+        <div id="pl-ingest" class="dhl-step">&#128229; Ingest</div>
+
+        <div id="pl-phase1" class="dhl-step dhl-step--expandable">
+          <span class="dhl-step__label">&#128269; Phase 1 — Discovery</span>
+          <ul class="dhl-step__agents">
+            <li>analyzer_agent</li>
+            <li>risk_detection_agent</li>
+            <li>migration_planner_agent</li>
+            <li>state_migration_agent</li>
+          </ul>
+        </div>
+
+        <div id="pl-gateA" class="dhl-step dhl-step--gate">Gate A — Plan review</div>
+
+        <div id="pl-phase2" class="dhl-step dhl-step--expandable">
+          <span class="dhl-step__label">&#9883; Phase 2 — Transform</span>
+          <ul class="dhl-step__agents">
+            <li>transformer_agent</li>
+            <li>refactor_agent</li>
+          </ul>
+        </div>
+
+        <div id="pl-phase3" class="dhl-step dhl-step--expandable">
+          <span class="dhl-step__label">&#129514; Phase 3 — Tests</span>
+          <ul class="dhl-step__agents">
+            <li>test_generation_agent</li>
+          </ul>
+        </div>
+
+        <div id="pl-phase4" class="dhl-step dhl-step--expandable">
+          <span class="dhl-step__label">&#9989; Phase 4 — Validate</span>
+          <ul class="dhl-step__agents">
+            <li>validator_agent</li>
+            <li>report_agent</li>
+          </ul>
+        </div>
+
+        <div id="pl-gateB" class="dhl-step dhl-step--gate">Gate B — Final review</div>
+
+        <div id="pl-integrate" class="dhl-step">&#128230; Deliverable</div>
+      </div>
+
+    </aside>
+
+    <!-- ══════════════════════════════════════════════════════
+         RIGHT — main output area
+         ══════════════════════════════════════════════════════ -->
+    <section class="dhl-output-panel">
+
+      <!-- Panel header -->
+      <div class="dhl-output-panel__head">
+        <span id="output-title" class="dhl-panel__title">Pipeline Output</span>
+        <div class="dhl-panel__head-actions">
+          <span id="job-state" class="dhl-meta"></span>
+          <button id="btn-chat-toggle" class="dhl-btn dhl-btn--ghost dhl-btn--sm" disabled>
+            &#128172; Ask Expert
+          </button>
+        </div>
+      </div>
+
+      <!-- Panel body — all content overlays each other; JS shows the right one -->
+      <div class="dhl-output-panel__body">
+
+        <!-- Chat output (shown when chat is active) -->
+        <div id="chat-output" class="dhl-chat-output">
+          <div id="chat-msgs" class="dhl-chat-msgs">
+            <div class="dhl-chat-welcome">
+              <div class="dhl-chat-welcome__icon">&#128172;</div>
+              <p>Ask the Migration Expert about analysis results, transformation decisions, risks, or recommendations.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analysis metrics (Phase 1 results) -->
+        <div id="analysis-metrics" class="dhl-analysis-metrics">
+          <div class="dhl-analysis-metrics__head">
+            <span class="dhl-analysis-metrics__title">&#128202; Phase 1 — Analysis Results</span>
+            <button id="btn-metrics-toggle" class="dhl-btn dhl-btn--ghost dhl-btn--sm">&#9650; Collapse</button>
+          </div>
+          <div id="metrics-body" class="dhl-metrics-body"></div>
+        </div>
+
+        <!-- Gate review panel (non-blocking) -->
+        <div id="gate-panel" class="dhl-gate">
+          <div class="dhl-gate__head">
+            <span id="gate-title" class="dhl-gate__title"></span>
+            <span id="gate-tag" class="dhl-val-chip dhl-val-chip--warn">Review</span>
+          </div>
+          <div class="dhl-gate__notice">
+            Pipeline continues automatically. Review the report below and approve, request changes, or reject.
+          </div>
+          <pre id="gate-report" class="dhl-gate__report"></pre>
+          <textarea id="gate-comments" class="dhl-input" rows="2"
+            placeholder="Comments (required only when requesting changes)…"></textarea>
+          <div class="dhl-gate__actions">
+            <button id="btn-approve" class="dhl-btn dhl-btn--primary">&#10003; Approve &amp; Continue</button>
+            <button id="btn-revise"  class="dhl-btn dhl-btn--ghost">&#9998; Request Changes</button>
+            <button id="btn-reject"  class="dhl-btn dhl-btn--ghost">&#10006; Reject</button>
+          </div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="output-empty" class="dhl-output-empty">
+          <div class="dhl-output-empty__icon">&#9883;</div>
+          <p>Paste Angular code on the left and click <strong>Start Migration</strong>.</p>
+          <p style="font-size:13px;margin-top:8px;color:#9ca3af">
+            Then use <strong>Ask Expert</strong> to query the analysis.
+          </p>
+        </div>
+
+        <!-- Completion panel -->
+        <div id="done-panel" class="dhl-done">
+          <div class="dhl-done__head">
+            <div>
+              <span class="dhl-done__icon">&#127881;</span>
+              <span id="done-title" class="dhl-done__title">Migration complete</span>
+            </div>
+            <a id="btn-deliverable" class="dhl-btn dhl-btn--primary dhl-btn--sm" href="#">
+              &#11015; Download deliverable.zip
+            </a>
+          </div>
+
+          <div class="dhl-done__cols">
+            <div class="dhl-done__tree">
+              <div class="dhl-done__group-title">React files</div>
+              <div id="files-code" class="dhl-file-tree"></div>
+              <div class="dhl-done__group-title">Test files</div>
+              <div id="files-tests" class="dhl-file-tree"></div>
+              <div class="dhl-done__group-title">Documents</div>
+              <div id="files-docs" class="dhl-file-tree"></div>
+            </div>
+            <div class="dhl-done__viewer">
+              <div id="viewer-name" class="dhl-meta">Select a file to view</div>
+              <pre class="dhl-code dhl-code--light"><code id="viewer-body"></code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error box -->
+        <div id="error-box" class="dhl-error-box"><span id="error-msg"></span></div>
+
+      </div><!-- /.dhl-output-panel__body -->
+    </section>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════
+       FLOATING CHAT POPUP — Migration Expert
+       ══════════════════════════════════════════════════════ -->
+  <div id="chat-popup" class="dhl-chat-popup" role="dialog" aria-label="Migration Expert">
+
+    <div class="dhl-chat-popup__header">
+      <div class="dhl-chat-popup__title">
+        <span>&#128172;</span> Migration Expert
+      </div>
+      <button id="btn-chat-close" class="dhl-chat-popup__close" title="Close">&#10005;</button>
+    </div>
+
+    <div class="dhl-chat-popup__suggestions">
+      <button class="dhl-suggestion" data-query="Analyse this Angular code and give me a detailed AnalysisReport including component count, service count, routes, directives, pipes, and overall project structure.">Analysis</button>
+      <button class="dhl-suggestion" data-query="What are the migration risks? Score complexity, identify blockers, and recommend an approach.">Risks</button>
+      <button class="dhl-suggestion" data-query="Generate a complete Vitest + React Testing Library test suite for this code.">Tests</button>
+      <button class="dhl-suggestion" data-query="Validate this React component for DHL DUIL compliance and React 18+ best practices.">Validate</button>
+      <button class="dhl-suggestion" data-query="Refactor this React code: remove anti-patterns, add memoisation, and enforce DHL DUIL component usage.">Refactor</button>
+      <button class="dhl-suggestion" data-query="Explain the Angular to React state management transformation decisions made for this project.">State</button>
+      <button class="dhl-suggestion" data-query="List all unsupported Angular patterns detected and the recommended manual interventions required.">Gaps</button>
+    </div>
+
+    <div id="chat-popup-msgs" class="dhl-chat-msgs dhl-chat-popup__msgs">
+      <div class="dhl-chat-welcome">
+        <div class="dhl-chat-welcome__icon">&#128172;</div>
+        <p>Ask any migration question — analysis, transformations, risks, DHL DUIL compliance, or report details.</p>
+        <p style="margin-top:8px;font-size:12px;opacity:.7">Out-of-scope questions will be redirected.</p>
+      </div>
+    </div>
+
+    <div class="dhl-chat-popup__compose">
+      <textarea id="chat-input" class="dhl-chat-input"
+        placeholder="Ask about the migration…"></textarea>
+      <div class="dhl-chat-compose__row">
+        <button id="btn-chat-send" class="dhl-btn dhl-btn--primary" disabled>Send</button>
+        <button id="btn-chat-clear-history" class="dhl-btn dhl-btn--ghost">Clear</button>
+      </div>
+    </div>
+
+  </div><!-- /#chat-popup -->
+
+  <script src="/app.js"></script>
+</body>
+</html>

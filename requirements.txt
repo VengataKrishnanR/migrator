@@ -1,0 +1,22 @@
+# Core dependencies
+loguru
+httpx
+pydantic
+pyyaml
+python-dotenv
+
+# Google GenAI SDK
+google-genai
+google-adk>=2.1.0
+
+# V3 server layer (FastAPI HTTP shell over JobService)
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Dev / test
+pytest
+
+# Pure-Python git (zip/git ingestion fallback when system git absent)
+dulwich
+openpyxl
